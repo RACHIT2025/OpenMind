@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Data files
+data/*.bin
+data/*.json
+data/*.jsonl
+data/*.parquet
+data/*.txt
+!data/.gitkeep
+
+# Model checkpoints
+models/checkpoints/
+models/*.bin
+models/*.safetensors
+models/*.pt
+!models/.gitkeep
+
+# Results
+results/
+
+# Logs
+*.log
+wandb/
+runs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Node
+node_modules/
+frontend/dist/

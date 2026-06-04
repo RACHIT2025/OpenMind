@@ -1,0 +1,47 @@
+# ============================================================
+# OpenMind Inference Server Dockerfile
+# Slim Python image for API serving
+# ============================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies (serving only)
+COPY requirements.txt .
+RUN pip install --no-cache-dir \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir \
+    transformers \
+    fastapi \
+    uvicorn \
+    pydantic \
+    pyyaml \
+    numpy \
+    regex \
+    tqdm
+
+# Copy source code
+COPY src/ ./src/
+COPY configs/ ./configs/
+COPY frontend/ ./frontend/
+COPY setup.py .
+COPY README.md .
+
+RUN pip install -e .
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default: start server (model path must be mounted/provided)
+ENV MODEL_PATH=/app/models/openmind-125m
+CMD ["python", "src/inference/api_server.py", "--model", "${MODEL_PATH}", "--port", "8000"]

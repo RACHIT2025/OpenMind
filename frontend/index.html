@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="OpenMind - Your personal AI assistant powered by an open-source language model">
+    <title>OpenMind AI - Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 6 L12 18 M6 12 L18 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <span class="logo-text">OpenMind</span>
+                </div>
+                <button class="btn-icon new-chat-btn" id="newChatBtn" title="New Chat">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="sidebar-search">
+                <input type="text" placeholder="Search conversations..." id="searchInput" class="search-input">
+            </div>
+
+            <div class="sidebar-conversations" id="conversationList">
+                <!-- Conversations populated by JS -->
+            </div>
+
+            <div class="sidebar-footer">
+                <button class="sidebar-footer-btn" id="settingsBtn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <span>Settings</span>
+                </button>
+                <button class="sidebar-footer-btn" id="themeToggle">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                    <span>Dark Mode</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Mobile Sidebar Toggle -->
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12h18M3 6h18M3 18h18" stroke-linecap="round"/>
+            </svg>
+        </button>
+
+        <!-- Main Chat Area -->
+        <main class="chat-main">
+            <!-- Welcome Screen (shown when no messages) -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <div class="welcome-content">
+                    <div class="welcome-logo">
+                        <div class="welcome-logo-glow"></div>
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="url(#grad1)" stroke-width="2"/>
+                            <path d="M12 6 L12 18 M6 12 L18 12" stroke="url(#grad1)" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="12" cy="12" r="3" fill="url(#grad1)"/>
+                            <defs>
+                                <linearGradient id="grad1" x1="0" y1="0" x2="24" y2="24">
+                                    <stop offset="0%" stop-color="#6366f1"/>
+                                    <stop offset="100%" stop-color="#8b5cf6"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <h1 class="welcome-title">How can I help you today?</h1>
+                    <p class="welcome-subtitle">I'm OpenMind, your AI assistant. Ask me anything.</p>
+
+                    <div class="welcome-suggestions">
+                        <button class="suggestion-card" onclick="sendSuggestion('Explain quantum computing in simple terms')">
+                            <div class="suggestion-icon">💡</div>
+                            <div class="suggestion-text">
+                                <span class="suggestion-title">Explain a concept</span>
+                                <span class="suggestion-desc">Quantum computing in simple terms</span>
+                            </div>
+                        </button>
+                        <button class="suggestion-card" onclick="sendSuggestion('Write a Python function to sort a list using merge sort')">
+                            <div class="suggestion-icon">🧑‍💻</div>
+                            <div class="suggestion-text">
+                                <span class="suggestion-title">Write code</span>
+                                <span class="suggestion-desc">Merge sort in Python</span>
+                            </div>
+                        </button>
+                        <button class="suggestion-card" onclick="sendSuggestion('What are the key differences between React and Vue?')">
+                            <div class="suggestion-icon">⚡</div>
+                            <div class="suggestion-text">
+                                <span class="suggestion-title">Compare technologies</span>
+                                <span class="suggestion-desc">React vs Vue frameworks</span>
+                            </div>
+                        </button>
+                        <button class="suggestion-card" onclick="sendSuggestion('Help me write a professional email to request a meeting')">
+                            <div class="suggestion-icon">✍️</div>
+                            <div class="suggestion-text">
+                                <span class="suggestion-title">Draft content</span>
+                                <span class="suggestion-desc">Professional meeting request</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- Messages populated by JS -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <textarea
+                            id="messageInput"
+                            placeholder="Message OpenMind..."
+                            rows="1"
+                            autofocus
+                        ></textarea>
+                        <div class="input-actions">
+                            <button class="btn-icon stop-btn hidden" id="stopBtn" title="Stop generating">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="6" y="6" width="12" height="12" rx="2"/>
+                                </svg>
+                            </button>
+                            <button class="btn-send" id="sendBtn" title="Send message">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="input-disclaimer">OpenMind can make mistakes. Consider verifying important information.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings Panel -->
+        <div class="settings-overlay hidden" id="settingsOverlay">
+            <div class="settings-panel">
+                <div class="settings-header">
+                    <h2>Settings</h2>
+                    <button class="btn-icon" id="closeSettings">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="settings-body">
+                    <div class="settings-group">
+                        <label class="settings-label">Model</label>
+                        <select class="settings-select" id="modelSelect">
+                            <option value="openmind-125m">OpenMind 125M</option>
+                            <option value="openmind-350m">OpenMind 350M</option>
+                            <option value="openmind-760m">OpenMind 760M</option>
+                        </select>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="settings-label">
+                            Temperature
+                            <span class="settings-value" id="tempValue">0.7</span>
+                        </label>
+                        <input type="range" class="settings-slider" id="tempSlider"
+                               min="0" max="2" step="0.1" value="0.7">
+                        <div class="slider-labels">
+                            <span>Precise</span>
+                            <span>Creative</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="settings-label">
+                            Max Tokens
+                            <span class="settings-value" id="maxTokensValue">512</span>
+                        </label>
+                        <input type="range" class="settings-slider" id="maxTokensSlider"
+                               min="64" max="2048" step="64" value="512">
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="settings-label">
+                            Top-P (Nucleus Sampling)
+                            <span class="settings-value" id="topPValue">0.9</span>
+                        </label>
+                        <input type="range" class="settings-slider" id="topPSlider"
+                               min="0" max="1" step="0.05" value="0.9">
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="settings-label">System Prompt</label>
+                        <textarea class="settings-textarea" id="systemPrompt" rows="3"
+                                  placeholder="You are a helpful AI assistant...">You are OpenMind, a helpful, harmless, and honest AI assistant.</textarea>
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="settings-label">API Endpoint</label>
+                        <input type="text" class="settings-input" id="apiEndpoint" value="http://localhost:8000">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

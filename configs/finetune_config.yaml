@@ -1,0 +1,54 @@
+model:
+  name: "openmind-125m-sft"
+  base_model_path: "models/checkpoints/openmind-125m"
+
+sft:
+  max_seq_len: 2048
+  lr: 2.0e-5
+  epochs: 3
+  batch_size: 4
+  gradient_accumulation_steps: 8
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  dtype: "bfloat16"
+
+lora:
+  enabled: true
+  r: 64
+  lora_alpha: 16
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+    - "k_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+dpo:
+  beta: 0.1
+  label_smoothing: 0.0
+  max_length: 2048
+  max_prompt_length: 1024
+  loss_type: "sigmoid"
+  lr: 5.0e-7
+  epochs: 1
+  batch_size: 2
+  gradient_accumulation_steps: 16
+
+data:
+  sft_dataset: "data/sft_train.jsonl"
+  dpo_dataset: "data/dpo_train.jsonl"
+  format: "alpaca"
+
+checkpoint:
+  output_dir: "models/checkpoints/sft"
+  save_every: 500
+
+logging:
+  use_wandb: false
+  log_every: 10
+  project_name: "openmind-finetune"

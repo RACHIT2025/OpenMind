@@ -1,0 +1,41 @@
+# ============================================================
+# OpenMind Training Dockerfile
+# NVIDIA CUDA base with PyTorch for GPU training
+# ============================================================
+
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system deps
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    git \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set python3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install flash-attention (optional, may fail on some GPUs)
+RUN pip install --no-cache-dir flash-attn --no-build-isolation || true
+
+# Copy source code
+COPY . .
+
+# Install package
+RUN pip install -e .
+
+# Default command
+CMD ["python", "src/training/train.py", "--config", "configs/base_config.yaml"]
