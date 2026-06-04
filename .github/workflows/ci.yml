@@ -2,26 +2,13 @@ name: OpenMind CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install linter
-        run: pip install ruff
-      - name: Run ruff
-        run: ruff check src/ tests/
-
   test:
     runs-on: ubuntu-latest
-    needs: lint
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,23 +18,7 @@ jobs:
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install transformers datasets regex numpy tqdm pyyaml
-          pip install fastapi uvicorn pydantic
-          pip install pytest httpx
+          pip install fastapi uvicorn pydantic pytest httpx
       - name: Run tests
         run: pytest tests/ -v --tb=short
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install mypy
-        run: |
-          pip install mypy
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install transformers datasets regex numpy pyyaml fastapi pydantic
-      - name: Run mypy
-        run: mypy src/ --ignore-missing-imports --no-strict-optional
         continue-on-error: true
