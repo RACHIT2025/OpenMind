@@ -193,6 +193,8 @@ class DataPipeline:
             try:
                 from .tokenizer import BPETokenizer
             except ImportError:
+                import sys as _sys
+                _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
                 from tokenizer import BPETokenizer
             self.tokenizer = BPETokenizer.load(tokenizer_path)
 
@@ -206,6 +208,8 @@ class DataPipeline:
         try:
             from .tokenizer import BPETokenizer
         except ImportError:
+            import sys as _sys
+            _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from tokenizer import BPETokenizer
         self.tokenizer = BPETokenizer.load(tokenizer_path)
 
