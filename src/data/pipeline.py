@@ -190,7 +190,10 @@ class DataPipeline:
         self.tokenizer = None
 
         if tokenizer_path and os.path.exists(tokenizer_path):
-            from .tokenizer import BPETokenizer
+            try:
+                from .tokenizer import BPETokenizer
+            except ImportError:
+                from tokenizer import BPETokenizer
             self.tokenizer = BPETokenizer.load(tokenizer_path)
 
         self.quality_filter = QualityFilter()
@@ -200,7 +203,10 @@ class DataPipeline:
 
     def load_tokenizer(self, tokenizer_path: str):
         """Load tokenizer from disk."""
-        from .tokenizer import BPETokenizer
+        try:
+            from .tokenizer import BPETokenizer
+        except ImportError:
+            from tokenizer import BPETokenizer
         self.tokenizer = BPETokenizer.load(tokenizer_path)
 
     def process_dataset(
