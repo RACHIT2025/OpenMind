@@ -20,7 +20,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .config_openmind import OpenMindConfig
+try:
+    from .config_openmind import OpenMindConfig
+except ImportError:
+    from config_openmind import OpenMindConfig
 
 
 # ─── RMSNorm ──────────────────────────────────────────────────────────────────
