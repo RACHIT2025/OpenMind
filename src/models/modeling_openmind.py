@@ -511,12 +511,15 @@ class OpenMindModel(nn.Module):
         # Try safetensors first, then PyTorch format
         safetensors_path = os.path.join(model_dir, "model.safetensors")
         pytorch_path = os.path.join(model_dir, "pytorch_model.bin")
+        pt_path = os.path.join(model_dir, "model.pt")
 
         if os.path.exists(safetensors_path):
             from safetensors.torch import load_file
             state_dict = load_file(safetensors_path)
         elif os.path.exists(pytorch_path):
             state_dict = torch.load(pytorch_path, map_location=device)
+        elif os.path.exists(pt_path):
+            state_dict = torch.load(pt_path, map_location=device)
         else:
             raise FileNotFoundError(f"No model weights found in {model_dir}")
 
