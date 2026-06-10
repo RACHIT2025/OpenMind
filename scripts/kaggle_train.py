@@ -187,4 +187,16 @@ print(f"\\n✅ Zip created: {os.path.getsize('/kaggle/working/openmind-125m.zip'
 from IPython.display import FileLink, HTML
 display(FileLink("/kaggle/working/openmind-125m.zip"))
 display(HTML('<a href="/kaggle/working/openmind-125m.zip" download>📥 Click to download openmind-125m.zip</a>'))
+
+# ── UPLOAD TO TRANSFER.SH FOR DIRECT LINK ──
+try:
+    print("\\n📤 Uploading to transfer.sh for direct download link...", flush=True)
+    import subprocess
+    res = subprocess.run(["curl", "--upload-file", "/kaggle/working/openmind-125m.zip", "https://transfer.sh/openmind-125m.zip"], capture_output=True, text=True)
+    if res.returncode == 0 and res.stdout.strip():
+        print(f"📥 Direct Download Link: {res.stdout.strip()}\\n", flush=True)
+    else:
+        print("Upload to transfer.sh failed, please use the Kaggle sidebar file explorer to download.", flush=True)
+except Exception as e:
+    print(f"Upload failed: {e}", flush=True)
 """
