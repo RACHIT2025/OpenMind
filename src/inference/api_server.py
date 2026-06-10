@@ -92,6 +92,21 @@ class ModelInfo(BaseModel):
 
 # ─── Model Manager ────────────────────────────────────────────────────────────
 
+class HFTokenizerWrapper:
+    """Wrapper around HuggingFace tokenizer to match BPETokenizer API."""
+
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.eos_token_id = tokenizer.eos_token_id
+        self.vocab_size = tokenizer.vocab_size
+
+    def encode(self, text, allowed_special=None):
+        return self.tokenizer.encode(text)
+
+    def decode(self, ids):
+        return self.tokenizer.decode(ids, skip_special_tokens=True)
+
+
 class ModelManager:
     """Manages model loading and inference."""
 
@@ -113,20 +128,26 @@ class ModelManager:
         self.model_name = Path(model_path).name
 
         # Load tokenizer
-        tokenizer_dir = os.path.join(model_path, "tokenizer")
-        if os.path.exists(tokenizer_dir):
-            self.tokenizer = BPETokenizer.load(tokenizer_dir)
+        if self.model.config.vocab_size == 50257:
+            from transformers import AutoTokenizer
+            print("Loading HuggingFace GPT-2 tokenizer...")
+            hf_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            self.tokenizer = HFTokenizerWrapper(hf_tokenizer)
         else:
-            # Try parent directory
-            for f in os.listdir(model_path):
-                if f.endswith("_vocab.json"):
-                    name = f.replace("_vocab.json", "")
-                    self.tokenizer = BPETokenizer.load(model_path, name)
-                    break
+            tokenizer_dir = os.path.join(model_path, "tokenizer")
+            if os.path.exists(tokenizer_dir):
+                self.tokenizer = BPETokenizer.load(tokenizer_dir)
+            else:
+                # Try parent directory
+                for f in os.listdir(model_path):
+                    if f.endswith("_vocab.json"):
+                        name = f.replace("_vocab.json", "")
+                        self.tokenizer = BPETokenizer.load(model_path, name)
+                        break
 
-        if self.tokenizer is None:
-            print("Warning: No tokenizer found, creating default")
-            self.tokenizer = BPETokenizer(vocab_size=32000)
+            if self.tokenizer is None:
+                print("Warning: No tokenizer found, creating default")
+                self.tokenizer = BPETokenizer(vocab_size=32000)
 
         print(f"Model '{self.model_name}' loaded successfully!")
 
