@@ -1,6 +1,7 @@
 model:
   name: "openmind-125m-sft"
-  base_model_path: "models/checkpoints/openmind-125m"
+  base_model_path: "models/checkpoints/openmind-125m-final"
+
 
 sft:
   max_seq_len: 2048
