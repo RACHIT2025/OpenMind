@@ -30,34 +30,63 @@ def format_chat(
     messages: list[dict],
     system_prompt: str = SYSTEM_DEFAULT,
     add_generation_prompt: bool = False,
+    template: str = "chat",
 ) -> str:
     """
-    Format a list of chat messages into the OpenMind chat template.
+    Format a list of chat messages into a template.
 
     Args:
         messages: List of {"role": "user"|"assistant"|"system", "content": "..."}
         system_prompt: Default system prompt if none in messages
         add_generation_prompt: If True, add assistant prompt for generation
+        template: Template format to use: "chat", "alpaca", or "raw"
 
     Returns:
         Formatted text string
     """
-    parts = []
+    if template == "alpaca":
+        parts = []
+        # Find system message or use default
+        system_content = system_prompt
+        for m in messages:
+            if m["role"] == "system":
+                system_content = m["content"]
+        
+        parts.append(f"{system_content}\n\nBelow is an instruction that describes a task. Write a response that appropriately completes the request.")
+        
+        for msg in messages:
+            if msg["role"] == "user":
+                parts.append(f"\n### Instruction:\n{msg['content']}")
+            elif msg["role"] == "assistant":
+                parts.append(f"\n### Response:\n{msg['content']}")
+                
+        if add_generation_prompt:
+            parts.append("\n### Response:\n")
+            
+        return "\n".join(parts)
+        
+    elif template == "raw":
+        return "\n".join(msg["content"] for msg in messages)
+        
+    else:
+        # Default "chat" template
+        parts = []
 
-    # Check if system message is in messages
-    has_system = any(m["role"] == "system" for m in messages)
-    if not has_system:
-        parts.append(f"<|system|>\n{system_prompt}<|endoftext|>")
+        # Check if system message is in messages
+        has_system = any(m["role"] == "system" for m in messages)
+        if not has_system:
+            parts.append(f"<|system|>\n{system_prompt}<|endoftext|>")
 
-    for msg in messages:
-        role = msg["role"]
-        content = msg["content"]
-        parts.append(f"<|{role}|>\n{content}<|endoftext|>")
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            parts.append(f"<|{role}|>\n{content}<|endoftext|>")
 
-    if add_generation_prompt:
-        parts.append("<|assistant|>\n")
+        if add_generation_prompt:
+            parts.append("<|assistant|>\n")
 
-    return "\n".join(parts)
+        return "\n".join(parts)
+
 
 
 # ─── Dataset Format Parsers ───────────────────────────────────────────────────

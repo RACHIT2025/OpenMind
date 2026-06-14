@@ -386,6 +386,7 @@ class OpenMindModel(nn.Module):
         top_p: float = 0.9,
         eos_token_id: int = 0,
         do_sample: bool = True,
+        repetition_penalty: float = 1.0,
     ) -> torch.Tensor:
         """
         Autoregressive text generation with KV-cache.
@@ -398,6 +399,7 @@ class OpenMindModel(nn.Module):
             top_p: Nucleus sampling threshold (1.0 = disabled)
             eos_token_id: Token ID that signals end of generation
             do_sample: If False, use greedy decoding
+            repetition_penalty: Repetition penalty (1.0 = disabled)
 
         Returns:
             Generated token IDs including the input prefix
@@ -421,6 +423,16 @@ class OpenMindModel(nn.Module):
 
             logits = outputs["logits"][:, -1, :]
             past_key_values = outputs["past_key_values"]
+
+            # Apply repetition penalty
+            if repetition_penalty != 1.0:
+                for i in range(logits.shape[0]):
+                    for token_id in set(generated[i].tolist()):
+                        logit = logits[i, token_id].item()
+                        if logit < 0:
+                            logits[i, token_id] = logit * repetition_penalty
+                        else:
+                            logits[i, token_id] = logit / repetition_penalty
 
             if do_sample:
                 # Apply temperature

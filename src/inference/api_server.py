@@ -55,6 +55,8 @@ class ChatCompletionRequest(BaseModel):
     stop: Optional[list[str]] = None
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
+    repetition_penalty: float = Field(default=1.15, ge=0.0)
+    template: Optional[str] = "auto"
 
 
 class CompletionRequest(BaseModel):
@@ -66,6 +68,8 @@ class CompletionRequest(BaseModel):
     max_tokens: int = 256
     stream: bool = False
     stop: Optional[list[str]] = None
+    repetition_penalty: float = 1.15
+
 
 
 class ChatCompletionChoice(BaseModel):
@@ -115,6 +119,7 @@ class ModelManager:
         self.tokenizer: Optional[BPETokenizer] = None
         self.model_name: str = ""
         self.device: str = "cpu"
+        self.chat_template: str = "chat"
 
     def load(self, model_path: str, device: str = None):
         """Load model and tokenizer from a directory."""
@@ -126,6 +131,14 @@ class ModelManager:
         self.model = OpenMindModel.from_pretrained(model_path, device=device)
         self.model.eval()
         self.model_name = Path(model_path).name
+
+        # Auto-detect prompt template
+        if "sft" in model_path.lower() or "aligned" in model_path.lower():
+            self.chat_template = "chat"
+            print("Auto-detected SFT/Aligned model: default chat template set to 'chat'")
+        else:
+            self.chat_template = "alpaca"
+            print("Auto-detected Base model: default chat template set to 'alpaca' (Instruction-Tuning)")
 
         # Load tokenizer
         if self.model.config.vocab_size == 50257:
@@ -158,6 +171,8 @@ class ModelManager:
         temperature: float = 0.7,
         top_p: float = 0.9,
         top_k: int = 50,
+        repetition_penalty: float = 1.0,
+        stop: Optional[list[str]] = None,
     ) -> str:
         """Generate text from a prompt."""
         input_ids = self.tokenizer.encode(prompt, allowed_special={"all"})
@@ -170,11 +185,19 @@ class ModelManager:
             top_p=top_p,
             top_k=top_k,
             eos_token_id=self.tokenizer.eos_token_id,
+            repetition_penalty=repetition_penalty,
         )
 
         # Decode only the generated tokens
         generated_ids = output_ids[0, len(input_ids):].tolist()
-        return self.tokenizer.decode(generated_ids)
+        response_text = self.tokenizer.decode(generated_ids)
+
+        if stop:
+            for stop_seq in stop:
+                if stop_seq in response_text:
+                    response_text = response_text.split(stop_seq)[0]
+
+        return response_text
 
     async def stream_generate(
         self,
@@ -183,6 +206,8 @@ class ModelManager:
         temperature: float = 0.7,
         top_p: float = 0.9,
         top_k: int = 50,
+        repetition_penalty: float = 1.0,
+        stop: Optional[list[str]] = None,
     ) -> AsyncGenerator[str, None]:
         """Stream-generate tokens one at a time."""
         input_ids = self.tokenizer.encode(prompt, allowed_special={"all"})
@@ -190,6 +215,7 @@ class ModelManager:
 
         past_key_values = [None] * self.model.config.n_layers
         generated = input_tensor
+        generated_text = ""
 
         for _ in range(max_tokens):
             if past_key_values[0] is not None:
@@ -206,6 +232,16 @@ class ModelManager:
 
             logits = outputs["logits"][:, -1, :]
             past_key_values = outputs["past_key_values"]
+
+            # Apply repetition penalty
+            if repetition_penalty != 1.0:
+                for i in range(logits.shape[0]):
+                    for token_id in set(generated[i].tolist()):
+                        logit = logits[i, token_id].item()
+                        if logit < 0:
+                            logits[i, token_id] = logit * repetition_penalty
+                        else:
+                            logits[i, token_id] = logit / repetition_penalty
 
             # Apply temperature
             logits = logits / max(temperature, 1e-8)
@@ -238,10 +274,25 @@ class ModelManager:
                 break
 
             token_text = self.tokenizer.decode([token_id])
+
+            potential_text = generated_text + token_text
+            stopped = False
+            if stop:
+                for stop_seq in stop:
+                    if stop_seq in potential_text:
+                        stop_idx = potential_text.find(stop_seq)
+                        yield potential_text[len(generated_text):stop_idx]
+                        stopped = True
+                        break
+            if stopped:
+                break
+
+            generated_text = potential_text
             yield token_text
 
             # Small delay for streaming effect
             await asyncio.sleep(0)
+
 
 
 # ─── FastAPI Application ──────────────────────────────────────────────────────
@@ -293,16 +344,31 @@ async def chat_completions(request: ChatCompletionRequest):
     if manager.model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
+    # Determine template
+    template = request.template
+    if not template or template == "auto":
+        template = manager.chat_template
+
     # Format messages into prompt
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    prompt = format_chat(messages, add_generation_prompt=True)
+    prompt = format_chat(messages, add_generation_prompt=True, template=template)
+
+    # Determine stop sequences
+    stop_sequences = request.stop
+    if not stop_sequences:
+        if template == "chat":
+            stop_sequences = ["<|user|>", "<|system|>", "<|endoftext|>"]
+        elif template == "alpaca":
+            stop_sequences = ["###", "Instruction:", "Response:", "<|endoftext|>"]
+        else:
+            stop_sequences = ["<|endoftext|>"]
 
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
 
     if request.stream:
         return StreamingResponse(
             _stream_chat_response(
-                completion_id, prompt, request
+                completion_id, prompt, request, stop_sequences
             ),
             media_type="text/event-stream",
         )
@@ -314,6 +380,8 @@ async def chat_completions(request: ChatCompletionRequest):
         temperature=request.temperature,
         top_p=request.top_p,
         top_k=request.top_k,
+        repetition_penalty=request.repetition_penalty,
+        stop=stop_sequences,
     )
 
     # Count tokens (approximate)
@@ -342,6 +410,7 @@ async def _stream_chat_response(
     completion_id: str,
     prompt: str,
     request: ChatCompletionRequest,
+    stop_sequences: Optional[list[str]],
 ) -> AsyncGenerator[str, None]:
     """Generate streaming SSE response."""
     # Initial chunk with role
@@ -361,6 +430,8 @@ async def _stream_chat_response(
         temperature=request.temperature,
         top_p=request.top_p,
         top_k=request.top_k,
+        repetition_penalty=request.repetition_penalty,
+        stop=stop_sequences,
     ):
         chunk = {
             "id": completion_id,
@@ -389,12 +460,17 @@ async def text_completions(request: CompletionRequest):
     if manager.model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
+    # For text completions, default stop sequence is <|endoftext|> if not provided
+    stop_sequences = request.stop or ["<|endoftext|>"]
+
     response_text = manager.generate_text(
         request.prompt,
         max_tokens=request.max_tokens,
         temperature=request.temperature,
         top_p=request.top_p,
         top_k=request.top_k,
+        repetition_penalty=request.repetition_penalty,
+        stop=stop_sequences,
     )
 
     return {
@@ -431,9 +507,12 @@ def start_server(
     host: str = "0.0.0.0",
     port: int = 8000,
     device: str = None,
+    chat_template: str = "auto",
 ):
     """Start the API server."""
     manager.load(model_path, device)
+    if chat_template != "auto":
+        manager.chat_template = chat_template
 
     # Setup frontend
     frontend_dir = os.path.join(
@@ -463,6 +542,8 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--chat-template", type=str, default="auto", choices=["auto", "chat", "alpaca", "raw"], help="Chat template override")
     args = parser.parse_args()
 
-    start_server(args.model, args.host, args.port, args.device)
+    start_server(args.model, args.host, args.port, args.device, args.chat_template)
+

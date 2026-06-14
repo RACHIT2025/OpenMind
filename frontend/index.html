@@ -206,6 +206,26 @@
                     </div>
 
                     <div class="settings-group">
+                        <label class="settings-label">
+                            Repetition Penalty
+                            <span class="settings-value" id="repetitionPenaltyValue">1.15</span>
+                        </label>
+                        <input type="range" class="settings-slider" id="repetitionPenaltySlider"
+                               min="1.0" max="2.0" step="0.05" value="1.15">
+                    </div>
+
+                    <div class="settings-group">
+                        <label class="settings-label">Prompt Template</label>
+                        <select class="settings-select" id="templateSelect">
+                            <option value="auto">Auto-detect (Server default)</option>
+                            <option value="chat">OpenMind Chat (Aligned/SFT)</option>
+                            <option value="alpaca">Instruction-Tuning (Base model)</option>
+                            <option value="raw">Raw Text (No template)</option>
+                        </select>
+                    </div>
+
+
+                    <div class="settings-group">
                         <label class="settings-label">System Prompt</label>
                         <textarea class="settings-textarea" id="systemPrompt" rows="3"
                                   placeholder="You are a helpful AI assistant...">You are OpenMind, a helpful, harmless, and honest AI assistant.</textarea>

@@ -25,6 +25,8 @@ const state = {
         topP: 0.9,
         systemPrompt: 'You are OpenMind, a helpful, harmless, and honest AI assistant.',
         apiEndpoint: 'http://localhost:8000',
+        repetitionPenalty: 1.15,
+        template: 'auto',
     },
 };
 
@@ -54,6 +56,9 @@ const elements = {
     maxTokensValue: $('#maxTokensValue'),
     topPSlider: $('#topPSlider'),
     topPValue: $('#topPValue'),
+    repetitionPenaltySlider: $('#repetitionPenaltySlider'),
+    repetitionPenaltyValue: $('#repetitionPenaltyValue'),
+    templateSelect: $('#templateSelect'),
     systemPrompt: $('#systemPrompt'),
     apiEndpoint: $('#apiEndpoint'),
 };
@@ -324,6 +329,8 @@ async function sendMessage(userText) {
                 temperature: state.settings.temperature,
                 top_p: state.settings.topP,
                 max_tokens: state.settings.maxTokens,
+                repetition_penalty: state.settings.repetitionPenalty || 1.15,
+                template: state.settings.template || 'auto',
                 stream: true,
             }),
             signal: state.abortController.signal,
@@ -542,6 +549,9 @@ function setupEventListeners() {
         elements.maxTokensValue.textContent = state.settings.maxTokens;
         elements.topPSlider.value = state.settings.topP;
         elements.topPValue.textContent = state.settings.topP;
+        elements.repetitionPenaltySlider.value = state.settings.repetitionPenalty || 1.15;
+        elements.repetitionPenaltyValue.textContent = state.settings.repetitionPenalty || 1.15;
+        elements.templateSelect.value = state.settings.template || 'auto';
         elements.systemPrompt.value = state.settings.systemPrompt;
         elements.apiEndpoint.value = state.settings.apiEndpoint;
     });
@@ -577,6 +587,17 @@ function setupEventListeners() {
     elements.topPSlider.addEventListener('input', (e) => {
         state.settings.topP = parseFloat(e.target.value);
         elements.topPValue.textContent = state.settings.topP;
+        saveState();
+    });
+
+    elements.repetitionPenaltySlider.addEventListener('input', (e) => {
+        state.settings.repetitionPenalty = parseFloat(e.target.value);
+        elements.repetitionPenaltyValue.textContent = state.settings.repetitionPenalty;
+        saveState();
+    });
+
+    elements.templateSelect.addEventListener('change', (e) => {
+        state.settings.template = e.target.value;
         saveState();
     });
 

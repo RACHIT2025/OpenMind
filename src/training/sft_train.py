@@ -134,6 +134,12 @@ class SFTDataset(Dataset):
         text = parsed["text"]
         token_ids = self.tokenizer.encode(text, allowed_special={"all"})
 
+        # Get format template name (default to chat)
+        prompt_messages = parsed["messages"][:-1]
+        prompt_text = format_chat(prompt_messages, add_generation_prompt=True)
+        prompt_token_ids = self.tokenizer.encode(prompt_text, allowed_special={"all"})
+        prompt_len = len(prompt_token_ids)
+
         # Truncate or pad
         if len(token_ids) > self.max_seq_len:
             token_ids = token_ids[:self.max_seq_len]
@@ -143,10 +149,15 @@ class SFTDataset(Dataset):
 
         input_ids = torch.tensor(token_ids, dtype=torch.long)
         labels = input_ids.clone()
+        
+        # Mask prompt (instruction/system) tokens in labels so loss is response-only
+        labels[:min(prompt_len, self.max_seq_len)] = -100
+        
         # Mask padding tokens in labels
         labels[labels == self.tokenizer.pad_token_id] = -100
 
         return input_ids, labels
+
 
 
 # ─── Main SFT Training ───────────────────────────────────────────────────────
