@@ -508,11 +508,19 @@ class OpenMindModel(nn.Module):
         try:
             from safetensors.torch import save_file
             save_file(self.state_dict(), model_path)
-        except ImportError:
+        except Exception:
+            # Safetensors might fail or be missing, fall back to PyTorch bin format.
+            # Clean up empty/partial safetensors file if created
+            if os.path.exists(model_path):
+                try:
+                    os.remove(model_path)
+                except Exception:
+                    pass
             model_path = os.path.join(output_dir, "pytorch_model.bin")
             torch.save(self.state_dict(), model_path)
 
         print(f"Model saved to {output_dir}/")
+
 
     @classmethod
     def from_pretrained(cls, model_dir: str, device: str = "cpu") -> "OpenMindModel":

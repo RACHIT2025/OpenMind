@@ -111,7 +111,7 @@ graph TB
 
 ---
 
-## 📁 Complete File Inventory (38 files created)
+## 📁 Complete File Inventory (39 files created)
 
 ```
 openmind/
@@ -124,16 +124,18 @@ openmind/
 ├── configs/
 │   ├── base_config.yaml              # 125M training config
 │   └── finetune_config.yaml          # LoRA/DPO config
-├── data/.gitkeep
+├── data/
+│   ├── .gitkeep
+│   └── sft_train.jsonl               # SFT startup instruction dataset [NEW]
 ├── models/.gitkeep
 ├── docker/
 │   ├── Dockerfile.train              # GPU training image
 │   ├── Dockerfile.serve              # API server image
 │   └── Dockerfile.frontend           # Nginx frontend image
 ├── frontend/
-│   ├── index.html                    # Chat dashboard
+│   ├── index.html                    # Chat dashboard (repetition penalty + template dropdown)
 │   ├── css/style.css                 # Premium design system
-│   └── js/app.js                     # Chat application logic
+│   └── js/app.js                     # Chat application logic (stores and sends new settings)
 ├── scripts/
 │   └── launch_train.sh               # Training launcher
 ├── src/
@@ -145,21 +147,21 @@ openmind/
 │   │   ├── __init__.py
 │   │   ├── tokenizer.py              # BPE tokenizer from scratch
 │   │   ├── pipeline.py               # Data processing pipeline
-│   │   └── chat_templates.py         # Alpaca/ShareGPT/HH-RLHF parsers
+│   │   └── chat_templates.py         # Chat formats (chat, alpaca, raw)
 │   ├── evaluation/
 │   │   ├── __init__.py
 │   │   └── run_eval.py               # Benchmark suite
 │   ├── inference/
 │   │   ├── __init__.py
-│   │   └── api_server.py             # OpenAI-compatible API
+│   │   └── api_server.py             # OpenAI-compatible API (repetition penalty, stop sequences, templates)
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── config_openmind.py        # Model configuration
-│   │   └── modeling_openmind.py      # Transformer architecture
+│   │   └── modeling_openmind.py      # Transformer architecture (repetition penalty generation)
 │   ├── training/
 │   │   ├── __init__.py
 │   │   ├── train.py                  # Pretraining script
-│   │   ├── sft_train.py              # Supervised fine-tuning
+│   │   ├── sft_train.py              # SFT training (response-only loss masking)
 │   │   └── dpo_train.py              # DPO alignment
 │   └── utils/
 │       ├── __init__.py
@@ -170,3 +172,4 @@ openmind/
     ├── test_data.py                  # 12 data pipeline tests
     └── test_api.py                   # 5 API tests
 ```
+

@@ -53,11 +53,12 @@ class TestAPIEndpoints:
     def client(self):
         """Create test client."""
         try:
-            from httpx import AsyncClient
+            from httpx import AsyncClient, ASGITransport
             from inference.api_server import app
-            return AsyncClient(app=app, base_url="http://test")
+            return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
         except ImportError:
             pytest.skip("httpx not installed")
+
 
     @pytest.mark.asyncio
     async def test_health_endpoint(self, client):
