@@ -184,6 +184,7 @@ function updateChatView() {
     if (!conv || conv.messages.length === 0) {
         elements.welcomeScreen.classList.remove('hidden');
         elements.chatMessages.classList.remove('active');
+        elements.chatMessages.innerHTML = '';
     } else {
         elements.welcomeScreen.classList.add('hidden');
         elements.chatMessages.classList.add('active');
