@@ -269,14 +269,26 @@ def main(config_path: str):
     final_path = os.path.join(output_dir, "sft-final")
     os.makedirs(final_path, exist_ok=True)
 
-    # Merge LoRA weights and save full model
-    for name, module in model.named_modules():
+    # Merge LoRA weights and replace LoRALinear layers back with original standard Linear layers
+    for name, module in list(model.named_modules()):
         if isinstance(module, LoRALinear):
             module.merge()
+            
+            # Find parent module
+            parts = name.rsplit(".", 1)
+            if len(parts) == 2:
+                parent_name, child_name = parts
+                parent = dict(model.named_modules())[parent_name]
+            else:
+                parent = model
+                child_name = name
+                
+            setattr(parent, child_name, module.original)
 
     raw_model = model.module if hasattr(model, "module") else model
     raw_model.save_pretrained(final_path)
     print(f"\nSFT complete! Model saved to {final_path}")
+
 
 
 if __name__ == "__main__":
