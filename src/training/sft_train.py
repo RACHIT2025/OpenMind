@@ -186,13 +186,28 @@ def main(config_path: str):
     model = model.to(device)
 
     # Load tokenizer
-    from src.data.tokenizer import BPETokenizer
-    tokenizer_path = os.path.join(model_cfg["base_model_path"], "tokenizer")
-    if os.path.exists(tokenizer_path):
-        tokenizer = BPETokenizer.load(tokenizer_path)
+    if model.config.vocab_size == 50257:
+        from transformers import AutoTokenizer
+        class HFTokenizerWrapper:
+            def __init__(self, tokenizer):
+                self.tokenizer = tokenizer
+                self.eos_token_id = tokenizer.eos_token_id
+                self.pad_token_id = tokenizer.eos_token_id  # Use eos as pad
+                self.vocab_size = tokenizer.vocab_size
+            def encode(self, text, allowed_special=None):
+                return self.tokenizer.encode(text)
+            def decode(self, ids):
+                return self.tokenizer.decode(ids, skip_special_tokens=True)
+        print("Loading HuggingFace GPT-2 tokenizer...")
+        tokenizer = HFTokenizerWrapper(AutoTokenizer.from_pretrained("gpt2"))
     else:
-        tokenizer = BPETokenizer(vocab_size=32000)
-        print("Warning: Using untrained tokenizer!")
+        from src.data.tokenizer import BPETokenizer
+        tokenizer_path = os.path.join(model_cfg["base_model_path"], "tokenizer")
+        if os.path.exists(tokenizer_path):
+            tokenizer = BPETokenizer.load(tokenizer_path)
+        else:
+            tokenizer = BPETokenizer(vocab_size=32000)
+            print("Warning: Using untrained tokenizer!")
 
     # Create dataset
     dataset = SFTDataset(
