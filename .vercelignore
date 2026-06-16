@@ -1,0 +1,13 @@
+# Ignore python requirements and setup files to bypass Python framework detection on Vercel
+requirements.txt
+setup.py
+docker-compose.yml
+
+# Ignore python/training source directories
+src/
+scripts/
+configs/
+tests/
+docker/
+data/
+models/
