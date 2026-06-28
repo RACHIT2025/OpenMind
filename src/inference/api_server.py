@@ -6,9 +6,15 @@ Serves the OpenMind model with:
 - POST /v1/completions (legacy text completion)
 - GET /v1/models (list available models)
 - GET /health (health check)
-- Static file serving for frontend
+- Static file serving for frontend at "/"
 
 Fully compatible with OpenAI client libraries.
+
+HF Spaces Deployment:
+  - Listens on 0.0.0.0:7860 (required by HF Spaces)
+  - MODEL_PATH env var controls weight loading
+  - Rate limited: 5 requests/min per IP (via slowapi)
+  - Input validation: max 500 characters per message
 """
 
 import os
@@ -19,15 +25,24 @@ import uuid
 import asyncio
 import argparse
 from pathlib import Path
+from contextlib import asynccontextmanager
 from typing import Optional, AsyncGenerator
+
+from dotenv import load_dotenv
+
+# Load .env if present (no-op in production / HF Spaces)
+load_dotenv()
 
 import torch
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
@@ -37,11 +52,26 @@ from src.data.tokenizer import BPETokenizer
 from src.data.chat_templates import format_chat, SYSTEM_DEFAULT
 
 
+# ─── Rate Limiter ──────────────────────────────────────────────────────────────
+
+limiter = Limiter(key_func=get_remote_address)
+
+
 # ─── Request/Response Models ──────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
     role: str = "user"
     content: str = ""
+
+    @field_validator("content")
+    @classmethod
+    def content_max_length(cls, v: str) -> str:
+        if len(v) > 500:
+            raise ValueError(
+                f"Message content exceeds maximum length of 500 characters "
+                f"(got {len(v)})."
+            )
+        return v
 
 
 class ChatCompletionRequest(BaseModel):
@@ -61,7 +91,7 @@ class ChatCompletionRequest(BaseModel):
 
 class CompletionRequest(BaseModel):
     model: str = "openmind-125m"
-    prompt: str
+    prompt: str = Field(..., max_length=500)
     temperature: float = 0.7
     top_p: float = 0.9
     top_k: int = 50
@@ -69,7 +99,6 @@ class CompletionRequest(BaseModel):
     stream: bool = False
     stop: Optional[list[str]] = None
     repetition_penalty: float = 1.15
-
 
 
 class ChatCompletionChoice(BaseModel):
@@ -122,7 +151,7 @@ class ModelManager:
         self.chat_template: str = "chat"
 
     def load(self, model_path: str, device: str = None):
-        """Load model and tokenizer from a directory."""
+        """Load model and tokenizer from a directory or .pt file."""
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
@@ -294,6 +323,30 @@ class ModelManager:
             await asyncio.sleep(0)
 
 
+# ─── Global model manager ─────────────────────────────────────────────────────
+
+manager = ModelManager()
+
+
+# ─── App lifespan (load model at startup) ─────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load model on startup using MODEL_PATH env var."""
+    model_path = os.getenv("MODEL_PATH", "./weights/model.pt")
+    if os.path.exists(model_path):
+        try:
+            manager.load(model_path)
+        except Exception as exc:
+            print(f"[WARNING] Could not load model from {model_path}: {exc}")
+    else:
+        print(
+            f"[INFO] MODEL_PATH={model_path!r} not found at startup. "
+            "Model will not be loaded until weights are present."
+        )
+    yield
+    # Cleanup (if needed)
+
 
 # ─── FastAPI Application ──────────────────────────────────────────────────────
 
@@ -301,7 +354,12 @@ app = FastAPI(
     title="OpenMind API",
     description="OpenAI-compatible API for the OpenMind language model",
     version="0.1.0",
+    lifespan=lifespan,
 )
+
+# Attach rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -311,9 +369,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global model manager
-manager = ModelManager()
 
+# ─── Health & Model Endpoints ─────────────────────────────────────────────────
 
 @app.get("/health")
 async def health_check():
@@ -338,23 +395,26 @@ async def list_models():
     return {"object": "list", "data": [m.dict() for m in models]}
 
 
+# ─── Chat Completions ─────────────────────────────────────────────────────────
+
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
-    """OpenAI-compatible chat completions endpoint."""
+@limiter.limit("5/minute")
+async def chat_completions(request: Request, body: ChatCompletionRequest):
+    """OpenAI-compatible chat completions endpoint (max 5 req/min per IP)."""
     if manager.model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     # Determine template
-    template = request.template
+    template = body.template
     if not template or template == "auto":
         template = manager.chat_template
 
     # Format messages into prompt
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
     prompt = format_chat(messages, add_generation_prompt=True, template=template)
 
     # Determine stop sequences
-    stop_sequences = request.stop
+    stop_sequences = body.stop
     if not stop_sequences:
         if template == "chat":
             stop_sequences = ["<|user|>", "<|system|>", "<|endoftext|>"]
@@ -365,10 +425,10 @@ async def chat_completions(request: ChatCompletionRequest):
 
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
 
-    if request.stream:
+    if body.stream:
         return StreamingResponse(
             _stream_chat_response(
-                completion_id, prompt, request, stop_sequences
+                completion_id, prompt, body, stop_sequences
             ),
             media_type="text/event-stream",
         )
@@ -376,11 +436,11 @@ async def chat_completions(request: ChatCompletionRequest):
     # Non-streaming response
     response_text = manager.generate_text(
         prompt,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature,
-        top_p=request.top_p,
-        top_k=request.top_k,
-        repetition_penalty=request.repetition_penalty,
+        max_tokens=body.max_tokens,
+        temperature=body.temperature,
+        top_p=body.top_p,
+        top_k=body.top_k,
+        repetition_penalty=body.repetition_penalty,
         stop=stop_sequences,
     )
 
@@ -454,22 +514,25 @@ async def _stream_chat_response(
     yield "data: [DONE]\n\n"
 
 
+# ─── Legacy Text Completions ──────────────────────────────────────────────────
+
 @app.post("/v1/completions")
-async def text_completions(request: CompletionRequest):
-    """Legacy text completion endpoint."""
+@limiter.limit("5/minute")
+async def text_completions(request: Request, body: CompletionRequest):
+    """Legacy text completion endpoint (max 5 req/min per IP)."""
     if manager.model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     # For text completions, default stop sequence is <|endoftext|> if not provided
-    stop_sequences = request.stop or ["<|endoftext|>"]
+    stop_sequences = body.stop or ["<|endoftext|>"]
 
     response_text = manager.generate_text(
-        request.prompt,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature,
-        top_p=request.top_p,
-        top_k=request.top_k,
-        repetition_penalty=request.repetition_penalty,
+        body.prompt,
+        max_tokens=body.max_tokens,
+        temperature=body.temperature,
+        top_p=body.top_p,
+        top_k=body.top_k,
+        repetition_penalty=body.repetition_penalty,
         stop=stop_sequences,
     )
 
@@ -480,70 +543,101 @@ async def text_completions(request: CompletionRequest):
         "model": manager.model_name,
         "choices": [{"text": response_text, "index": 0, "finish_reason": "stop"}],
         "usage": {
-            "prompt_tokens": len(manager.tokenizer.encode(request.prompt)),
+            "prompt_tokens": len(manager.tokenizer.encode(body.prompt)),
             "completion_tokens": len(manager.tokenizer.encode(response_text)),
         },
     }
 
 
-# ─── Static File Serving ──────────────────────────────────────────────────────
+# ─── Frontend Static Files ────────────────────────────────────────────────────
 
-def setup_static_files(app: FastAPI, frontend_dir: str = None):
-    """Mount frontend static files."""
-    if frontend_dir is None:
-        frontend_dir = os.path.join(
-            Path(__file__).resolve().parent.parent.parent, "frontend", "dist"
-        )
+def setup_static_files():
+    """Mount frontend/ as static files at '/' (called after route registration)."""
+    # Resolve frontend directory relative to the project root
+    project_root = Path(__file__).resolve().parent.parent.parent
+    frontend_dir = project_root / "frontend"
 
-    if os.path.exists(frontend_dir):
-        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+    if frontend_dir.exists():
+        # Serve CSS and JS subdirectories
+        for subdir in ["css", "js", "assets"]:
+            asset_dir = frontend_dir / subdir
+            if asset_dir.exists():
+                app.mount(f"/{subdir}", StaticFiles(directory=str(asset_dir)), name=subdir)
+
+        # Serve root index.html at "/"
+        @app.get("/")
+        async def serve_frontend():
+            index_path = frontend_dir / "index.html"
+            if index_path.exists():
+                return FileResponse(str(index_path))
+            return {"message": "OpenMind API is running"}
+
         print(f"Serving frontend from {frontend_dir}")
+    else:
+        print(f"[INFO] Frontend directory not found at {frontend_dir}. Skipping static serving.")
+
+
+# Register static files
+setup_static_files()
 
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 def start_server(
-    model_path: str,
-    host: str = "0.0.0.0",
-    port: int = 8000,
+    model_path: str = None,
+    host: str = None,
+    port: int = None,
     device: str = None,
     chat_template: str = "auto",
 ):
-    """Start the API server."""
-    manager.load(model_path, device)
-    if chat_template != "auto":
+    """Start the API server.
+
+    All parameters fall back to environment variables:
+      MODEL_PATH  — path to weights (default: ./weights/model.pt)
+      SERVER_HOST — bind host (default: 0.0.0.0)
+      SERVER_PORT — bind port (default: 7860)
+    """
+    if model_path is None:
+        model_path = os.getenv("MODEL_PATH", "./weights/model.pt")
+    if host is None:
+        host = os.getenv("SERVER_HOST", "0.0.0.0")
+    if port is None:
+        port = int(os.getenv("SERVER_PORT", "7860"))
+
+    if chat_template != "auto" and manager.model is not None:
         manager.chat_template = chat_template
-
-    # Setup frontend
-    frontend_dir = os.path.join(
-        Path(__file__).resolve().parent.parent.parent, "frontend"
-    )
-    if os.path.exists(frontend_dir):
-        # Serve the frontend index.html at root
-        @app.get("/")
-        async def serve_frontend():
-            index_path = os.path.join(frontend_dir, "index.html")
-            if os.path.exists(index_path):
-                return FileResponse(index_path)
-            return {"message": "OpenMind API is running"}
-
-        # Serve static assets
-        for subdir in ["css", "js", "assets"]:
-            asset_dir = os.path.join(frontend_dir, subdir)
-            if os.path.exists(asset_dir):
-                app.mount(f"/{subdir}", StaticFiles(directory=asset_dir), name=subdir)
 
     uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OpenMind API Server")
-    parser.add_argument("--model", type=str, required=True, help="Path to model directory")
-    parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Path to model directory/file (overrides MODEL_PATH env var)",
+    )
+    parser.add_argument("--host", type=str, default=None, help="Bind host (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=None, help="Bind port (default: 7860)")
     parser.add_argument("--device", type=str, default=None)
-    parser.add_argument("--chat-template", type=str, default="auto", choices=["auto", "chat", "alpaca", "raw"], help="Chat template override")
+    parser.add_argument(
+        "--chat-template",
+        type=str,
+        default="auto",
+        choices=["auto", "chat", "alpaca", "raw"],
+        help="Chat template override",
+    )
     args = parser.parse_args()
 
-    start_server(args.model, args.host, args.port, args.device, args.chat_template)
+    # Allow --model to override env var
+    if args.model:
+        os.environ["MODEL_PATH"] = args.model
 
+    start_server(
+        model_path=args.model,
+        host=args.host,
+        port=args.port,
+        device=args.device,
+        chat_template=args.chat_template,
+    )

@@ -56,3 +56,11 @@ xxhash>=3.4.0
 # Testing
 pytest>=7.4.0
 httpx>=0.25.0
+
+# ── HF Spaces Deployment ──────────────────────────────────────
+# Weight download from Hugging Face Model Hub
+huggingface_hub>=0.20.0
+# Rate limiting for FastAPI (slowapi)
+slowapi>=0.1.9
+# Environment variable loading from .env
+python-dotenv>=1.0.0

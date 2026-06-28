@@ -1,3 +1,13 @@
+---
+title: OpenMind 125M
+emoji: 🧠
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🧠 OpenMind
 
 **Build, Train, and Serve Your Own Language Model**

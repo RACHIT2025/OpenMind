@@ -7,6 +7,19 @@ __pycache__/
 dist/
 build/
 *.egg
+*.pyc
+
+# Environment secrets
+.env
+*.env.*
+!.env.example
+
+# Model weight files
+weights/
+*.pt
+*.pth
+*.bin
+*.safetensors
 
 # Virtual environments
 venv/
@@ -33,6 +46,7 @@ models/checkpoints/
 models/*.bin
 models/*.safetensors
 models/*.pt
+models/*.pth
 !models/.gitkeep
 
 # Results
