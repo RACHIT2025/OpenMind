@@ -7,9 +7,10 @@ Usage:
 Environment variables:
     HF_MODEL_REPO  — HF Hub repo ID  (default: Rachit17-12/openmind-125m)
     HF_TOKEN       — Optional HF token for private repos
-    MODEL_PATH     — Target weights file path (default: ./weights/model.pt)
+    MODEL_PATH     — Used ONLY to derive the weights directory
+                     (default: ./weights/model.pt → dir: ./weights/)
 
-Downloads into the same directory as MODEL_PATH:
+Files downloaded (always hardcoded):
     ./weights/model.pt
     ./weights/config.json
 """
@@ -33,32 +34,25 @@ except ImportError:
     sys.exit(1)
 
 
-def _download_file(repo_id: str, filename: str, weights_dir: Path, hf_token) -> None:
-    """Download a single file from HF Hub into weights_dir, skipping if cached.
+# Filenames to download from HF Hub — always hardcoded, never from env vars
+HF_FILES = ["model.pt", "config.json"]
 
-    BUG 1 fix: skip check uses the absolute resolved *file* path so it can
-    never accidentally match a directory of the same name.
-    BUG 2 fix: weights_dir is always an absolute resolved path, guaranteeing
-    hf_hub_download places every file inside ./weights/ and not the cwd root.
-    """
-    # Always work with an absolute path to avoid any ambiguity
-    abs_weights_dir = weights_dir.resolve()
-    # BUG 1 fix: check the specific file, not the directory
-    target_file = abs_weights_dir / filename
+
+def _download_file(repo_id: str, filename: str, weights_dir: Path, hf_token) -> None:
+    """Download one file from HF Hub into weights_dir, skip if already a file."""
+    target_file = weights_dir / filename
 
     if target_file.exists() and target_file.is_file():
         size_mb = target_file.stat().st_size / 1_000_000
-        print(f"[INFO] '{filename}' already present at {target_file} ({size_mb:.1f} MB). Skipping.")
+        print(f"[INFO] '{filename}' already present ({size_mb:.1f} MB). Skipping.")
         return
 
-    print(f"[INFO] Downloading '{filename}' from {repo_id} into {abs_weights_dir} ...")
+    print(f"[INFO] Downloading '{filename}' from {repo_id} into {weights_dir} ...")
     try:
-        # BUG 2 fix: pass the absolute weights dir so hf_hub_download never
-        # writes relative to the cwd (which would put config.json at /app/)
         downloaded_path = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
-            local_dir=str(abs_weights_dir),
+            local_dir=str(weights_dir),
             token=hf_token,
         )
         print(f"[OK]   Saved to: {downloaded_path}")
@@ -78,29 +72,23 @@ def download_weights() -> None:
     repo_id = os.getenv("HF_MODEL_REPO", "Rachit17-12/openmind-125m")
     hf_token = os.getenv("HF_TOKEN") or None  # None → anonymous access
 
-    # Resolve MODEL_PATH to a concrete *file* path (not a directory)
-    # e.g. ./weights/model.pt  →  weights_dir = ./weights/
+    # Derive the weights DIRECTORY from MODEL_PATH — never use it as a filename
     model_path = Path(os.getenv("MODEL_PATH", "./weights/model.pt"))
-    weights_dir = model_path.parent
+    weights_dir = model_path.parent.resolve()  # absolute: e.g. /app/weights
 
-    # Ensure the weights directory exists before any download attempt
+    # Create weights directory if it doesn't exist
     weights_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[INFO] Weights directory: {weights_dir}")
+    print(f"[INFO] HF repo:           {repo_id}")
 
-    # Files to download — both land in weights_dir
-    #   ./weights/model.pt
-    #   ./weights/config.json
-    files_to_download = [
-        model_path.name,   # e.g. "model.pt"
-        "config.json",
-    ]
-
-    for filename in files_to_download:
+    # Download each hardcoded file individually
+    for filename in HF_FILES:
         _download_file(repo_id, filename, weights_dir, hf_token)
 
-    abs_weights_dir = weights_dir.resolve()
-    print(f"\n[OK] All required files are present in: {abs_weights_dir}")
-    for fname in files_to_download:
-        fpath = abs_weights_dir / fname
+    # Final summary
+    print(f"\n[OK] All files ready in: {weights_dir}")
+    for filename in HF_FILES:
+        fpath = weights_dir / filename
         status = f"{fpath.stat().st_size / 1_000_000:.1f} MB" if fpath.exists() else "MISSING"
         print(f"     {fpath}  [{status}]")
 
