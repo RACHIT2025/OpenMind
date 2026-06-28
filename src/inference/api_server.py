@@ -151,40 +151,56 @@ class ModelManager:
         self.chat_template: str = "chat"
 
     def load(self, model_path: str, device: str = None):
-        """Load model and tokenizer from a directory or .pt file."""
+        """Load model and tokenizer.
+
+        model_path must be the path to the .pt weights FILE
+        (e.g. "./weights/model.pt"). The parent directory is derived
+        from it and used for config.json / tokenizer lookup.
+
+          model_file = Path(model_path)          # ./weights/model.pt
+          model_dir  = Path(model_path).parent   # ./weights/
+        """
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
 
-        print(f"Loading model from {model_path} on {device}...")
-        self.model = OpenMindModel.from_pretrained(model_path, device=device)
-        self.model.eval()
-        self.model_name = Path(model_path).name
+        # Split into the weights FILE and its parent DIRECTORY
+        model_file = Path(model_path)
+        model_dir  = model_file.parent  # e.g. ./weights/
 
-        # Auto-detect prompt template
-        if "sft" in model_path.lower() or "aligned" in model_path.lower():
+        print(f"Loading model weights from {model_file} (dir: {model_dir}) on {device}...")
+
+        # Load weights from the .pt file; config.json is read from model_dir
+        self.model = OpenMindModel.from_pretrained(str(model_dir), device=device)
+        self.model.eval()
+        # Use the directory name as the model label (e.g. "weights" or "openmind-125m")
+        self.model_name = model_dir.name
+
+        # Auto-detect prompt template based on the weights path string
+        path_str = str(model_path).lower()
+        if "sft" in path_str or "aligned" in path_str:
             self.chat_template = "chat"
             print("Auto-detected SFT/Aligned model: default chat template set to 'chat'")
         else:
             self.chat_template = "alpaca"
             print("Auto-detected Base model: default chat template set to 'alpaca' (Instruction-Tuning)")
 
-        # Load tokenizer
+        # Load tokenizer — search inside model_dir (not the .pt file path)
         if self.model.config.vocab_size == 50257:
             from transformers import AutoTokenizer
             print("Loading HuggingFace GPT-2 tokenizer...")
             hf_tokenizer = AutoTokenizer.from_pretrained("gpt2")
             self.tokenizer = HFTokenizerWrapper(hf_tokenizer)
         else:
-            tokenizer_dir = os.path.join(model_path, "tokenizer")
-            if os.path.exists(tokenizer_dir):
-                self.tokenizer = BPETokenizer.load(tokenizer_dir)
+            tokenizer_dir = model_dir / "tokenizer"
+            if tokenizer_dir.exists():
+                self.tokenizer = BPETokenizer.load(str(tokenizer_dir))
             else:
-                # Try parent directory
-                for f in os.listdir(model_path):
+                # Search model_dir for a custom vocab file
+                for f in os.listdir(str(model_dir)):
                     if f.endswith("_vocab.json"):
                         name = f.replace("_vocab.json", "")
-                        self.tokenizer = BPETokenizer.load(model_path, name)
+                        self.tokenizer = BPETokenizer.load(str(model_dir), name)
                         break
 
             if self.tokenizer is None:
@@ -332,16 +348,23 @@ manager = ModelManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model on startup using MODEL_PATH env var."""
+    """Load model on startup using MODEL_PATH env var.
+
+    MODEL_PATH must point to the weights FILE (e.g. ./weights/model.pt).
+    The parent directory (./weights/) is where config.json lives.
+    """
     model_path = os.getenv("MODEL_PATH", "./weights/model.pt")
-    if os.path.exists(model_path):
+    model_file = Path(model_path)
+
+    # Check that the weights FILE exists (not just the directory)
+    if model_file.exists() and model_file.is_file():
         try:
-            manager.load(model_path)
+            manager.load(str(model_file))
         except Exception as exc:
-            print(f"[WARNING] Could not load model from {model_path}: {exc}")
+            print(f"[WARNING] Could not load model from {model_file}: {exc}")
     else:
         print(
-            f"[INFO] MODEL_PATH={model_path!r} not found at startup. "
+            f"[INFO] MODEL_PATH={model_path!r} — weights file not found at startup. "
             "Model will not be loaded until weights are present."
         )
     yield
