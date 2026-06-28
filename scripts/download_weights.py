@@ -34,20 +34,31 @@ except ImportError:
 
 
 def _download_file(repo_id: str, filename: str, weights_dir: Path, hf_token) -> None:
-    """Download a single file from HF Hub into weights_dir, skipping if cached."""
-    target = weights_dir / filename
+    """Download a single file from HF Hub into weights_dir, skipping if cached.
 
-    if target.exists():
-        size_mb = target.stat().st_size / 1_000_000
-        print(f"[INFO] '{filename}' already present ({size_mb:.1f} MB). Skipping.")
+    BUG 1 fix: skip check uses the absolute resolved *file* path so it can
+    never accidentally match a directory of the same name.
+    BUG 2 fix: weights_dir is always an absolute resolved path, guaranteeing
+    hf_hub_download places every file inside ./weights/ and not the cwd root.
+    """
+    # Always work with an absolute path to avoid any ambiguity
+    abs_weights_dir = weights_dir.resolve()
+    # BUG 1 fix: check the specific file, not the directory
+    target_file = abs_weights_dir / filename
+
+    if target_file.exists() and target_file.is_file():
+        size_mb = target_file.stat().st_size / 1_000_000
+        print(f"[INFO] '{filename}' already present at {target_file} ({size_mb:.1f} MB). Skipping.")
         return
 
-    print(f"[INFO] Downloading '{filename}' from {repo_id} ...")
+    print(f"[INFO] Downloading '{filename}' from {repo_id} into {abs_weights_dir} ...")
     try:
+        # BUG 2 fix: pass the absolute weights dir so hf_hub_download never
+        # writes relative to the cwd (which would put config.json at /app/)
         downloaded_path = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
-            local_dir=str(weights_dir),
+            local_dir=str(abs_weights_dir),
             token=hf_token,
         )
         print(f"[OK]   Saved to: {downloaded_path}")
@@ -67,14 +78,17 @@ def download_weights() -> None:
     repo_id = os.getenv("HF_MODEL_REPO", "Rachit17-12/openmind-125m")
     hf_token = os.getenv("HF_TOKEN") or None  # None → anonymous access
 
-    # Derive weights directory from MODEL_PATH env var
+    # Resolve MODEL_PATH to a concrete *file* path (not a directory)
+    # e.g. ./weights/model.pt  →  weights_dir = ./weights/
     model_path = Path(os.getenv("MODEL_PATH", "./weights/model.pt"))
     weights_dir = model_path.parent
 
-    # Ensure the weights directory exists
+    # Ensure the weights directory exists before any download attempt
     weights_dir.mkdir(parents=True, exist_ok=True)
 
-    # Files to download from the HF repo
+    # Files to download — both land in weights_dir
+    #   ./weights/model.pt
+    #   ./weights/config.json
     files_to_download = [
         model_path.name,   # e.g. "model.pt"
         "config.json",
@@ -83,7 +97,12 @@ def download_weights() -> None:
     for filename in files_to_download:
         _download_file(repo_id, filename, weights_dir, hf_token)
 
-    print("\n[OK] All required files are present in:", weights_dir.resolve())
+    abs_weights_dir = weights_dir.resolve()
+    print(f"\n[OK] All required files are present in: {abs_weights_dir}")
+    for fname in files_to_download:
+        fpath = abs_weights_dir / fname
+        status = f"{fpath.stat().st_size / 1_000_000:.1f} MB" if fpath.exists() else "MISSING"
+        print(f"     {fpath}  [{status}]")
 
 
 if __name__ == "__main__":
