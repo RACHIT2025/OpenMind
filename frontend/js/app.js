@@ -24,7 +24,6 @@ const state = {
         maxTokens: 512,
         topP: 0.9,
         systemPrompt: 'You are OpenMind, a helpful, harmless, and honest AI assistant.',
-        apiEndpoint: 'http://localhost:8000',
         repetitionPenalty: 1.15,
         template: 'auto',
     },
@@ -321,7 +320,8 @@ async function sendMessage(userText) {
             messages.unshift({ role: 'system', content: state.settings.systemPrompt });
         }
 
-        const response = await fetch(`${state.settings.apiEndpoint}/v1/chat/completions`, {
+        // Always use a relative URL — works locally and on HF Spaces
+        const response = await fetch('/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -374,8 +374,7 @@ async function sendMessage(userText) {
             fullResponse += '\n\n*[Generation stopped]*';
         } else {
             console.error('API Error:', error);
-            // Show a friendly demo response when API is not available
-            fullResponse = generateDemoResponse(userText);
+            fullResponse = `⚠️ **Error communicating with the API server.**\n\n${error.message}\n\nPlease check that the inference server is running and reachable.`;
         }
     }
 
@@ -398,27 +397,7 @@ function stopGenerating() {
     }
 }
 
-/**
- * Generate a demo response when the API server is not running.
- * This allows the UI to be tested standalone.
- */
-function generateDemoResponse(userText) {
-    const query = userText.toLowerCase();
 
-    if (query.includes('hello') || query.includes('hi')) {
-        return "Hello! 👋 I'm **OpenMind**, your open-source AI assistant. I'm currently running in demo mode since the API server isn't connected. Once you train the model and start the server, I'll provide real AI-generated responses!\n\nHere's what you can do:\n1. Train the model using the provided scripts\n2. Start the API server with `python src/inference/api_server.py --model your_model_path`\n3. Come back here and chat with your very own AI!";
-    }
-
-    if (query.includes('code') || query.includes('python') || query.includes('function')) {
-        return "Here's an example of what I can do when connected to the model:\n\n```python\ndef fibonacci(n):\n    \"\"\"Generate Fibonacci sequence up to n terms.\"\"\"\n    if n <= 0:\n        return []\n    elif n == 1:\n        return [0]\n    \n    fib = [0, 1]\n    for i in range(2, n):\n        fib.append(fib[i-1] + fib[i-2])\n    return fib\n\n# Example usage\nprint(fibonacci(10))\n# Output: [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]\n```\n\n*Note: This is a demo response. Connect the API server for real AI-generated code!*";
-    }
-
-    if (query.includes('quantum')) {
-        return "## Quantum Computing in Simple Terms 🔬\n\nImagine you have a coin:\n\n- **Classical computing**: The coin is either heads (0) or tails (1)\n- **Quantum computing**: The coin is spinning in the air — it's *both* heads AND tails at the same time! This is called **superposition**.\n\n### Key Concepts:\n\n1. **Qubits** - Quantum bits that can be 0, 1, or both simultaneously\n2. **Superposition** - Being in multiple states at once\n3. **Entanglement** - Two qubits linked so that measuring one instantly affects the other\n4. **Quantum Gates** - Operations that manipulate qubits\n\n> \"If you think you understand quantum mechanics, you don't understand quantum mechanics.\" — Richard Feynman\n\n*This is a demo response. Start the API server for real AI answers!*";
-    }
-
-    return `Thanks for your message! 🚀\n\nI'm **OpenMind** running in **demo mode**. The API server isn't connected yet, but here's what I understood from your message:\n\n> "${userText.slice(0, 100)}${userText.length > 100 ? '...' : ''}"\n\n### To get real AI responses:\n\n1. **Train** the 125M parameter model using Google Colab (see the training notebook)\n2. **Start the server**: \`python src/inference/api_server.py --model models/checkpoints/openmind-125m\`\n3. **Update the API endpoint** in Settings to point to your server\n4. **Chat away!** 🎉\n\nThe UI is fully functional — conversations are saved locally, you can create multiple chats, toggle dark/light mode, and adjust generation parameters.\n\n*Demo mode • Model not connected*`;
-}
 
 // ─── Message Formatting ──────────────────────────────────
 function formatMessage(text) {
@@ -554,7 +533,6 @@ function setupEventListeners() {
         elements.repetitionPenaltyValue.textContent = state.settings.repetitionPenalty || 1.15;
         elements.templateSelect.value = state.settings.template || 'auto';
         elements.systemPrompt.value = state.settings.systemPrompt;
-        elements.apiEndpoint.value = state.settings.apiEndpoint;
     });
 
     elements.closeSettings.addEventListener('click', () => {
@@ -604,11 +582,6 @@ function setupEventListeners() {
 
     elements.systemPrompt.addEventListener('change', (e) => {
         state.settings.systemPrompt = e.target.value;
-        saveState();
-    });
-
-    elements.apiEndpoint.addEventListener('change', (e) => {
-        state.settings.apiEndpoint = e.target.value;
         saveState();
     });
 
