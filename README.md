@@ -296,7 +296,13 @@ docker-compose up --build
 # Run all tests
 pytest tests/ -v
 
-# Run specific test file
+# Run tokenizer tests
+pytest tests/test_tokenizer.py -v
+
+# Run data pipeline tests
+pytest tests/test_data.py -v
+
+# Run specific model tests
 pytest tests/test_model.py -v
 ```
 
