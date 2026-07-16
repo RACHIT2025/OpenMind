@@ -308,11 +308,11 @@ pytest tests/test_model.py -v
 
 ## 📊 Model Sizes
 
-| Model | Params | Layers | Dim | Heads | Training Time (T4) |
-|-------|--------|--------|-----|-------|---------------------|
-| openmind-125m | 125M | 12 | 768 | 12 | ~4 hours |
-| openmind-350m | 350M | 24 | 1024 | 16 | ~12 hours |
-| openmind-760m | 760M | 24 | 1536 | 16 | ~24 hours |
+| Model | Params | Layers | Dim | KV Heads | Intermediate Dim | Training Time (T4) |
+|-------|--------|--------|-----|----------|------------------|---------------------|
+| openmind-125m | 125M | 12 | 768 | 12 | 2048 | ~4 hours |
+| openmind-350m | 350M | 24 | 1024 | 4 | 2730 | ~12 hours |
+| openmind-760m | 760M | 24 | 1536 | 4 | 4096 | ~24 hours |
 
 ## 📜 License
 
