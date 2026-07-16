@@ -60,6 +60,8 @@ See the [Google Colab Training Guide](#-google-colab-training-guide) below for s
 ```bash
 python src/inference/api_server.py --model models/checkpoints/openmind-125m --port 8000
 ```
+> [!NOTE]
+> Both the API server and CLI chat commands will automatically detect and fall back to CPU if a CUDA-compatible GPU is not available on your system.
 
 ### 5. Chat!
 Open `http://localhost:8000` or use the CLI:
