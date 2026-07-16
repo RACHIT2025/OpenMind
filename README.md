@@ -66,6 +66,10 @@ Open `http://localhost:8000` or use the CLI:
 ```bash
 python src/cli/main.py chat models/checkpoints/openmind-125m
 ```
+Alternatively, if you installed the package in editable mode (`pip install -e .`), you can run the console script directly:
+```bash
+openmind chat models/checkpoints/openmind-125m
+```
 
 ## 📁 Project Structure
 
